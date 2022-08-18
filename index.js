@@ -1,4 +1,4 @@
-import { encode as msgpack, decode as msgunpack } from 'msgpackr'
+import { decode as msgunpack, encode as msgpack } from 'msgpackr'
 import { providers as EthersProviders, utils as EthersUtils } from 'ethers'
 import blake2b from 'blake2b'
 import tweetnacl from 'tweetnacl'
@@ -16,6 +16,9 @@ const MESSAGE_PREFIX = 'This is a randomly generated string used to challenge yo
 
 const REQ_KEY_GET = 0x11
 const REQ_KEY_SET = 0x1A
+const REQ_ROW_GET = 0x21
+const REQ_ROW_UPDATES = 0x22
+const REQ_ROW_UPSERT = 0x2A
 
 const EDS_VER_TO_ETH_VER = {
   0x81: 'x25519-xsalsa20-poly1305'
@@ -153,14 +156,8 @@ export class EncryptedDatabase {
     }
   }
 
-  getKey = async (key) => {
-    const hash = easyHash(key)
-    const ID = randUint32()
-    this.sendTypedMessage(REQ_KEY_GET, {
-      ID,
-      Key: hash
-    })
-    const { Exists, Data } = await this.waitForReply(ID)
+  decryptDataResponse = async (id) => {
+    const { Exists, Data } = await this.waitForReply(id)
     if (!Exists) {
       return undefined
     }
@@ -170,17 +167,67 @@ export class EncryptedDatabase {
     return msgunpack(data)
   }
 
-  setKey = async (key, value) => {
-    const vBuf = msgpack(value)
+  encryptData = (data) => {
+    const vBuf = msgpack(data)
     const nonce = randomBytes(tweetnacl.secretbox.nonceLength)
     const ciphertext = tweetnacl.secretbox(vBuf, nonce, this.privateKey)
-    const total = Buffer.concat([nonce, ciphertext])
-    const ID = randUint32()
+    return Buffer.concat([nonce, ciphertext])
+  }
 
+  getKey = (key) => {
+    const hash = easyHash(key)
+    const ID = randUint32()
+    this.sendTypedMessage(REQ_KEY_GET, {
+      ID,
+      Key: hash
+    })
+    return this.decryptDataResponse(ID)
+  }
+
+  setKey = async (key, value) => {
+    const ID = randUint32()
     this.sendTypedMessage(REQ_KEY_SET, {
       ID,
       Key: easyHash(key),
-      Value: total
+      Value: this.encryptData(value)
+    })
+    return this.waitForReply(ID)
+  }
+
+  getRowByKey = (key) => {
+    const hash = easyHash(key)
+    const ID = randUint32()
+    this.sendTypedMessage(REQ_ROW_GET, {
+      ID,
+      KeyHash: hash
+    })
+    return this.decryptDataResponse(ID)
+  }
+
+  getRowsUpdatedSince = async (time) => {
+    const ID = randUint32()
+    this.sendTypedMessage(REQ_ROW_UPDATES, {
+      ID,
+      Since: time
+    })
+    const { Rows } = await this.waitForReply(ID)
+    return Rows.map(row => {
+      const nonce = row.Data.subarray(0, tweetnacl.secretbox.nonceLength)
+      const ciphertext = row.Data.subarray(tweetnacl.secretbox.nonceLength)
+      const data = tweetnacl.secretbox.open(ciphertext, nonce, this.privateKey)
+      return msgunpack(data)
+    })
+  }
+
+  upsertRow = async (primaryKey, row) => {
+    const KeyHash = easyHash(primaryKey)
+    const data = this.encryptData(row)
+    const ID = randUint32()
+
+    this.sendTypedMessage(REQ_ROW_UPSERT, {
+      ID,
+      KeyHash,
+      Data: data
     })
     return this.waitForReply(ID)
   }
