@@ -44,7 +44,7 @@ export class EncryptedDatabase {
   onInitialized = () => null
   IDToResolver = new Map()
 
-  async initialize (appID = null) {
+  async initialize ({ appID = null, url }) {
     this.provider = new EthersProviders.Web3Provider(window.ethereum)
     this.lock = new Mutex()
 
@@ -57,7 +57,7 @@ export class EncryptedDatabase {
     const pkBytes = Buffer.from(this._walletPubKey, 'base64')
     this._walletPKHash = easyHash(appID == null ? pkBytes : Buffer.concat([pkBytes, Buffer.from('_' + appID)]) )
 
-    this.ws = new WebSocket('ws://localhost:8000')
+    this.ws = new WebSocket(url)
     this.ws.binaryType = 'arraybuffer'
     this.ws.addEventListener('message', this.onMessage)
     return new Promise(resolve => {
