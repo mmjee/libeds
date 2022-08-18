@@ -44,7 +44,7 @@ export class EncryptedDatabase {
   onInitialized = () => null
   IDToResolver = new Map()
 
-  async initialize () {
+  async initialize (appID = null) {
     this.provider = new EthersProviders.Web3Provider(window.ethereum)
     this.lock = new Mutex()
 
@@ -54,7 +54,8 @@ export class EncryptedDatabase {
     this.addressBytes = EthersUtils.arrayify(this.address)
 
     this._walletPubKey = await this.provider.send('eth_getEncryptionPublicKey', [this.address])
-    this._walletPKHash = easyHash(Buffer.from(this._walletPubKey, 'base64'))
+    const pkBytes = Buffer.from(this._walletPubKey, 'base64')
+    this._walletPKHash = easyHash(appID == null ? pkBytes : Buffer.concat([pkBytes, Buffer.from('_' + appID)]) )
 
     this.ws = new WebSocket('ws://localhost:8000')
     this.ws.binaryType = 'arraybuffer'
@@ -195,7 +196,7 @@ export class EncryptedDatabase {
   }
 
   getRowByKey = (key) => {
-    const hash = easyHash(key)
+    const hash = easyHash(msgpack(key))
     const ID = randUint32()
     this.sendTypedMessage(REQ_ROW_GET, {
       ID,
@@ -220,7 +221,7 @@ export class EncryptedDatabase {
   }
 
   upsertRow = async (primaryKey, row) => {
-    const KeyHash = easyHash(primaryKey)
+    const KeyHash = easyHash(msgpack(primaryKey))
     const data = this.encryptData(row)
     const ID = randUint32()
 
