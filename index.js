@@ -38,6 +38,7 @@ export class EncryptedDatabase {
   _walletPKHash = null
   privateKey = null
   publicKey = null
+  onInitialized = () => null
   IDToResolver = new Map()
 
   async initialize () {
@@ -55,6 +56,9 @@ export class EncryptedDatabase {
     this.ws = new WebSocket('ws://localhost:8000')
     this.ws.binaryType = 'arraybuffer'
     this.ws.addEventListener('message', this.onMessage)
+    return new Promise(resolve => {
+      this.onInitialized = resolve
+    })
   }
 
   sendMessage (msg) {
@@ -128,6 +132,7 @@ export class EncryptedDatabase {
       }
       case STATE_AWAITING_WELCOME: {
         console.log('EDS | Received welcome, logged into the EDS system:', data)
+        this.onInitialized()
         this.state = STATE_FULLY_AUTHENTICATED
         break
       }
