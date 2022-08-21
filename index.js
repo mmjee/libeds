@@ -16,9 +16,11 @@ const MESSAGE_PREFIX = 'This is a randomly generated string used to challenge yo
 
 const REQ_KEY_GET = 0x11
 const REQ_KEY_SET = 0x1A
+const REQ_KEY_DEL = 0x1B
 const REQ_ROW_GET = 0x21
 const REQ_ROW_UPDATES = 0x22
 const REQ_ROW_UPSERT = 0x2A
+const REQ_ROW_DELETE = 0x2B
 
 const EDS_VER_TO_ETH_VER = {
   0x81: 'x25519-xsalsa20-poly1305'
@@ -185,6 +187,16 @@ export class EncryptedDatabase {
     return this.decryptDataResponse(ID)
   }
 
+  delKey = (key) => {
+    const hash = easyHash(key)
+    const ID = randUint32()
+    this.sendTypedMessage(REQ_KEY_DEL, {
+      ID,
+      Key: hash
+    })
+    return this.decryptDataResponse(ID)
+  }
+
   setKey = async (key, value) => {
     const ID = randUint32()
     this.sendTypedMessage(REQ_KEY_SET, {
@@ -199,6 +211,16 @@ export class EncryptedDatabase {
     const hash = easyHash(msgpack(key))
     const ID = randUint32()
     this.sendTypedMessage(REQ_ROW_GET, {
+      ID,
+      KeyHash: hash
+    })
+    return this.decryptDataResponse(ID)
+  }
+
+  delRowByKey = (key) => {
+    const hash = easyHash(msgpack(key))
+    const ID = randUint32()
+    this.sendTypedMessage(REQ_ROW_DELETE, {
       ID,
       KeyHash: hash
     })
