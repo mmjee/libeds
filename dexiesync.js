@@ -12,8 +12,8 @@ export async function initializeDexieTables ({ EDS, tableList }) {
     const updatedIDs = await table.bulkPut(updates)
     console.log('Synced', table.name, ':', updatedIDs)
 
-    table.hook('deleting', (primKey, obj) => {
-      // TODO
+    table.hook('deleting', (primKey) => {
+      EDS.delRowByKey(primKey).catch(e => console.error(e))
     })
     table.hook('updating', (_, primKey, obj) => {
       obj._table = table.name
