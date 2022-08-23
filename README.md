@@ -70,6 +70,6 @@ await initializeDexieTables({ EDS, tableList: [db.friends] })
 
 Users are identified by the two-value tuple (Wallet Address, Hash of Wallet Public Key + the App ID).
 
-The library first queries the server to see if an encrypted private key exists for the tuple, if there is one, it's decrypted with the help of the encrypted private key.
+The library first queries the server to see if an encrypted private key exists for the tuple, if there is one, it's decrypted with the help of the wallet.
 If there isn't one, one is randomly generated and encrypted with the wallet public key and stored in the server.
 The private key is never revealed to the server, ever. However, the security of the private key and therefore all data encrypted with it is predicated on the user's wallet's security.
