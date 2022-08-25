@@ -6,7 +6,7 @@ libeds requires a Web3 wallet like Brave Wallet or MetaMask.
 
 It handles key management, generation and synchronization based on the provided wallet. For more details on how this is handled, see below.
 
-It accepts arbitrary types, as everything is serialized by MessagePack.
+It accepts arbitrary types, as everything is serialized by MessagePack using `msgpackr`.
 
 ### Installation
 
@@ -23,9 +23,9 @@ const eds = new EDS()
 
 // **IMPORTANT**, this should not be in the constructor
 await eds.initialize({
-  // For a different key pair than any other applications, and therefore different data, specify a unique string here.
+  // To generate a unique private key for your application, and therefore maintain a different dataset, specify a unique string here.
   appID: '',
-  // There's a public instance at wss://eds.gra.১.net
+  // There's a public instance at wss://eds.gra.১.net, IPv6 only
   url: 'wss://eds.gra.১.net'
 })
 
