@@ -39,12 +39,8 @@ function randUint32 () {
 
 export class EncryptedDatabase {
   state = STATE_AWAITING_CHALLENGE
-  _walletPubKey = null
-  _walletPKHash = null
-  privateKey = null
-  publicKey = null
-  onInitialized = () => null
   IDToResolver = new Map()
+  onInitialized = () => null
 
   // Private functions ⬇️
   async initialize ({ appID = null, url }) {
@@ -72,8 +68,9 @@ export class EncryptedDatabase {
   initializeSocket () {
     this.ws = new WebSocket(this.wsURL)
     this.ws.binaryType = 'arraybuffer'
+    this.ws.addEventListener('error', this.onClosedOrError)
+    this.ws.addEventListener('close', this.onClosedOrError)
     this.ws.addEventListener('message', this.onMessage)
-    this.ws.addEventListener('close', this.onClosed)
   }
 
   sendMessage (msg) {
@@ -91,7 +88,7 @@ export class EncryptedDatabase {
     })
   }
 
-  onClosed = async () => {
+  onClosedOrError = async () => {
     this.writeLockRelease = await this.writeLock.acquire()
     this.state = STATE_AWAITING_CHALLENGE
     this.onInitialized = () => null
