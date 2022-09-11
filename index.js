@@ -46,9 +46,13 @@ export class EncryptedDatabase {
   onInitialized = () => null
   IDToResolver = new Map()
 
+  // Private functions ⬇️
   async initialize ({ appID = null, url }) {
+    this.wsURL = url
     this.provider = new EthersProviders.Web3Provider(window.ethereum)
     this.lock = new Mutex()
+    this.writeLock = new Mutex()
+    this.writeLockRelease = await this.writeLock.acquire()
 
     await this.provider.send('eth_requestAccounts', [])
     this.signer = this.provider.getSigner()
@@ -59,19 +63,25 @@ export class EncryptedDatabase {
     const pkBytes = Buffer.from(this._walletPubKey, 'base64')
     this._walletPKHash = easyHash(appID == null ? pkBytes : Buffer.concat([pkBytes, Buffer.from('_' + appID)]) )
 
-    this.ws = new WebSocket(url)
-    this.ws.binaryType = 'arraybuffer'
-    this.ws.addEventListener('message', this.onMessage)
+    this.initializeSocket()
     return new Promise(resolve => {
       this.onInitialized = resolve
     })
+  }
+
+  initializeSocket () {
+    this.ws = new WebSocket(this.wsURL)
+    this.ws.binaryType = 'arraybuffer'
+    this.ws.addEventListener('message', this.onMessage)
+    this.ws.addEventListener('close', this.onClosed)
   }
 
   sendMessage (msg) {
     this.ws.send(msgpack(msg))
   }
 
-  sendTypedMessage (type = null, msg) {
+  async sendTypedMessage (type = null, msg) {
+    await this.writeLock.waitForUnlock()
     this.ws.send(Buffer.concat([new Uint8Array([type]), msgpack(msg)]))
   }
 
@@ -79,6 +89,13 @@ export class EncryptedDatabase {
     return new Promise(resolve => {
       this.IDToResolver.set(id, resolve)
     })
+  }
+
+  onClosed = async () => {
+    this.writeLockRelease = await this.writeLock.acquire()
+    this.state = STATE_AWAITING_CHALLENGE
+    this.onInitialized = () => null
+    this.initializeSocket()
   }
 
   onMessage = async (msg) => {
@@ -140,6 +157,13 @@ export class EncryptedDatabase {
         console.log('EDS | Received welcome, logged into the EDS system:', data)
         this.onInitialized()
         this.state = STATE_FULLY_AUTHENTICATED
+        try {
+          this.writeLockRelease()
+          this.writeLockRelease = null
+        } catch (e) {
+          console.log('Errored while releasing write lock!')
+          console.error(e)
+        }
         break
       }
       case STATE_FULLY_AUTHENTICATED: {
@@ -177,20 +201,22 @@ export class EncryptedDatabase {
     return Buffer.concat([nonce, ciphertext])
   }
 
-  getKey = (key) => {
+  // Private functions ⬆️
+  // Public functions ⬇️
+  getKey = async (key) => {
     const hash = easyHash(key)
     const ID = randUint32()
-    this.sendTypedMessage(REQ_KEY_GET, {
+    await this.sendTypedMessage(REQ_KEY_GET, {
       ID,
       Key: hash
     })
     return this.decryptDataResponse(ID)
   }
 
-  delKey = (key) => {
+  delKey = async (key) => {
     const hash = easyHash(key)
     const ID = randUint32()
-    this.sendTypedMessage(REQ_KEY_DEL, {
+    await this.sendTypedMessage(REQ_KEY_DEL, {
       ID,
       Key: hash
     })
@@ -199,7 +225,7 @@ export class EncryptedDatabase {
 
   setKey = async (key, value) => {
     const ID = randUint32()
-    this.sendTypedMessage(REQ_KEY_SET, {
+    await this.sendTypedMessage(REQ_KEY_SET, {
       ID,
       Key: easyHash(key),
       Value: this.encryptData(value)
@@ -207,20 +233,20 @@ export class EncryptedDatabase {
     return this.waitForReply(ID)
   }
 
-  getRowByKey = (key) => {
+  getRowByKey = async (key) => {
     const hash = easyHash(msgpack(key))
     const ID = randUint32()
-    this.sendTypedMessage(REQ_ROW_GET, {
+    await this.sendTypedMessage(REQ_ROW_GET, {
       ID,
       KeyHash: hash
     })
     return this.decryptDataResponse(ID)
   }
 
-  delRowByKey = (key) => {
+  delRowByKey = async (key) => {
     const hash = easyHash(msgpack(key))
     const ID = randUint32()
-    this.sendTypedMessage(REQ_ROW_DELETE, {
+    await this.sendTypedMessage(REQ_ROW_DELETE, {
       ID,
       KeyHash: hash
     })
@@ -229,7 +255,7 @@ export class EncryptedDatabase {
 
   getRowsUpdatedSince = async (time) => {
     const ID = randUint32()
-    this.sendTypedMessage(REQ_ROW_UPDATES, {
+    await this.sendTypedMessage(REQ_ROW_UPDATES, {
       ID,
       Since: time
     })
@@ -247,7 +273,7 @@ export class EncryptedDatabase {
     const data = this.encryptData(row)
     const ID = randUint32()
 
-    this.sendTypedMessage(REQ_ROW_UPSERT, {
+    await this.sendTypedMessage(REQ_ROW_UPSERT, {
       ID,
       KeyHash,
       Data: data
