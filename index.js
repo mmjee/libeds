@@ -167,6 +167,7 @@ export class EncryptedDatabase {
         if (data.ID) {
           const resolver = this.IDToResolver.get(data.ID)
           if (resolver != null) {
+            this.IDToResolver.delete(data.ID)
             resolver(data)
           }
         } else {
