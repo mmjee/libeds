@@ -42,10 +42,10 @@ export class EncryptedDatabase {
   IDToResolver = new Map()
   onInitialized = () => null
 
-  // Private functions ⬇️
-  async initialize ({ appID = null, url }) {
+  // Initialization
+  async initialize (provider, { appID = null, url }) {
     this.wsURL = url
-    this.provider = new EthersProviders.Web3Provider(window.ethereum)
+    this.provider = new EthersProviders.Web3Provider(provider)
     this.lock = new Mutex()
     this.writeLock = new Mutex()
     this.writeLockRelease = await this.writeLock.acquire()
@@ -65,6 +65,7 @@ export class EncryptedDatabase {
     })
   }
 
+  // Private functions ⬇️
   initializeSocket () {
     this.ws = new WebSocket(this.wsURL)
     this.ws.binaryType = 'arraybuffer'
