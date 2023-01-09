@@ -5,6 +5,7 @@ import tweetnacl from 'tweetnacl'
 import { encrypt as encryptForWallet } from '@metamask/eth-sig-util'
 import base85 from 'base85'
 import { Mutex } from 'async-mutex'
+import sleep from 'sleep-promise'
 
 import { randomBytes } from 'crypto'
 
@@ -93,6 +94,7 @@ export class EncryptedDatabase {
     this.writeLockRelease = await this.writeLock.acquire()
     this.state = STATE_AWAITING_CHALLENGE
     this.onInitialized = () => null
+    await sleep(1000)
     this.initializeSocket()
   }
 
