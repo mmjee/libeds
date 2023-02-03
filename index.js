@@ -1,5 +1,5 @@
 import { decode as msgunpack, encode as msgpack } from 'msgpackr'
-import { providers as EthersProviders, utils as EthersUtils } from 'ethers'
+import { utils as EthersUtils } from 'ethers'
 import blake2b from 'blake2b'
 import tweetnacl from 'tweetnacl'
 import { encrypt as encryptForWallet } from '@metamask/eth-sig-util'
@@ -46,12 +46,16 @@ export class EncryptedDatabase {
   // Initialization
   async initialize (provider, { appID = null, url }) {
     this.wsURL = url
-    this.provider = new EthersProviders.Web3Provider(provider)
+    this.provider = provider
     this.lock = new Mutex()
     this.writeLock = new Mutex()
     this.writeLockRelease = await this.writeLock.acquire()
 
-    await this.provider.send('eth_requestAccounts', [])
+    try {
+      await this.provider.send('eth_requestAccounts', [])
+    } catch (e) {
+      console.error('EDS, failed to request accounts:', e)
+    }
     this.signer = this.provider.getSigner()
     this.address = await this.signer.getAddress()
     this.addressBytes = EthersUtils.arrayify(this.address)
