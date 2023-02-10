@@ -11,8 +11,8 @@ It accepts arbitrary types, as everything is serialized by MessagePack using `ms
 ### Installation
 
 ```shell
-npm install https://git.maharshi.ninja/root/libeds/archive/0.0.2.tar.gz
-yarn add https://git.maharshi.ninja/root/libeds/archive/0.0.2.tar.gz
+npm install https://git.maharshi.ninja/root/libeds/archive/0.1.2.tar.gz
+yarn add https://git.maharshi.ninja/root/libeds/archive/0.1.2.tar.gz
 ```
 
 ### Usage
@@ -25,7 +25,7 @@ const eds = new EDS()
 await eds.initialize({
   // To generate a unique private key for your application, and therefore maintain a different dataset, specify a unique string here.
   appID: '',
-  // There's a public instance at wss://eds.gra.১.net, IPv6 only
+  // There's a public instance at wss://eds.gra.১.net:18001
   url: 'wss://eds.gra.১.net'
 })
 
