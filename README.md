@@ -26,7 +26,7 @@ await eds.initialize({
   // To generate a unique private key for your application, and therefore maintain a different dataset, specify a unique string here.
   appID: '',
   // There's a public instance at wss://eds.gra.১.net:18001
-  url: 'wss://eds.gra.১.net'
+  url: 'wss://eds.gra.১.net:18001'
 })
 
 // Key-Value API
