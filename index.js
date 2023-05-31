@@ -230,11 +230,13 @@ export class EncryptedDatabase {
 
   setKey = async (key, value) => {
     const ID = randUint32()
+    const hash = easyHash(key)
     await this.sendTypedMessage(REQ_KEY_SET, {
       ID,
-      Key: easyHash(key),
+      Key: hash,
       Value: this.encryptData(value)
     })
+    console.log('Setting (KV) Key:', key, ';Value:', value, ';ID:', ID)
     return this.waitForReply(ID)
   }
 
@@ -245,6 +247,7 @@ export class EncryptedDatabase {
       ID,
       KeyHash: hash
     })
+    console.log('Getting row by ID:', hash, ';ID:', ID)
     return this.decryptDataResponse(ID)
   }
 
@@ -255,7 +258,9 @@ export class EncryptedDatabase {
       ID,
       KeyHash: hash
     })
-    return this.decryptDataResponse(ID)
+    const v = this.decryptDataResponse(ID)
+    console.log('Deleted:', key, ';ID:', hash, ';Response:', v)
+    return v
   }
 
   getRowsUpdatedSince = async (time) => {
@@ -269,7 +274,9 @@ export class EncryptedDatabase {
       const nonce = row.Data.subarray(0, tweetnacl.secretbox.nonceLength)
       const ciphertext = row.Data.subarray(tweetnacl.secretbox.nonceLength)
       const data = tweetnacl.secretbox.open(ciphertext, nonce, this.privateKey)
-      return msgunpack(data)
+      const v = msgunpack(data)
+      console.log('Synced rows and found:', v)
+      return v
     })
   }
 
@@ -278,6 +285,7 @@ export class EncryptedDatabase {
     const data = this.encryptData(row)
     const ID = randUint32()
 
+    console.log('Upserting:', primaryKey, KeyHash.toString('hex'), ';Data:', row, ';ID:', ID)
     await this.sendTypedMessage(REQ_ROW_UPSERT, {
       ID,
       KeyHash,
