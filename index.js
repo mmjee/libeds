@@ -1,6 +1,7 @@
 import { decode as msgunpack, encode as msgpack } from 'msgpackr'
 import { utils as EthersUtils } from 'ethers'
-import blake2b from 'blake2b'
+import { sha3_512 as SHA3 } from '@noble/hashes/sha3'
+
 import tweetnacl from 'tweetnacl'
 import { encrypt as encryptForWallet } from '@metamask/eth-sig-util'
 import base85 from 'base85'
@@ -28,7 +29,7 @@ const EDS_VER_TO_ETH_VER = {
 }
 
 function easyHash (buf) {
-  const h = blake2b(64)
+  const h = SHA3.create()
   h.update(Buffer.isBuffer(buf) ? buf : Buffer.from(buf))
   return Buffer.from(h.digest())
 }
