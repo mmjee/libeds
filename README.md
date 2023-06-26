@@ -6,7 +6,7 @@ libeds requires a Web3 wallet like Brave Wallet or MetaMask.
 
 It handles key management, generation and synchronization based on the provided wallet. For more details on how this is handled, see below.
 
-It accepts arbitrary types, as everything is serialized by MessagePack using `msgpackr`.
+It accepts types serializable by MessagePack, as everything is serialized using `msgpackr`.
 
 ### Installation
 
@@ -19,10 +19,10 @@ yarn add https://git.maharshi.ninja/root/libeds/archive/0.1.2.tar.gz
 
 ```javascript
 import { EDS } from 'libeds'
-const eds = new EDS()
+import { BrowserProvider } from 'ethers'
 
-// **IMPORTANT**, this should not be in the constructor
-await eds.initialize({
+// **IMPORTANT**, do not create an EDS instance using the constructor, use either (new EDS()).initialize or EDS.create
+const eds = await EDS.create(new BrowserProvider(window.ethereum, 'any'), {
   // To generate a unique private key for your application, and therefore maintain a different dataset, specify a unique string here.
   appID: '',
   // There's a public instance at wss://eds.gra.১.net:18001
@@ -49,6 +49,19 @@ await eds.delRowByKey('primary key')
 const changes = await eds.getRowsUpdatedSince(new Date(0))
 ```
 
+If you wish to use a self-generated private key, you can use the WalletWrapper, a simple class implements all that libeds needs, a full provider is not necessary.
+
+```javascript
+import { WalletWrapper } from 'libeds/walletwrapper'
+import { EDS } from 'libeds'
+
+const eds = await EDS.create(new WalletWrapper({
+  privateKey: Buffer.from('...', 'hex')
+}), {
+  ...
+})
+```
+
 For a simpler use involving local IndexedDB databases, Dexie support is included.
 
 ```javascript
@@ -58,11 +71,13 @@ import { initializeDexieTables } from 'libeds/dexiesync'
 const db = new Dexie('MyDatabase');
 // Declare tables, IDs and indexes
 db.version(1).stores({
-  friends: '++id, name, age'
+  friends: 'id, name, age'
 });
 // Syncs the data on the server to the local DB and sets up hooks to sync new changes to the server
 await initializeDexieTables({ EDS, tableList: [db.friends] })
 ```
+
+_WARNING_: Ensure that you DO NOT use a Dexie-generated primary key, because the primary key will desynchronize across devices and will conflict. Use an UUID generated where you insert new documents into the table.
 
 **DO NOTE THAT CONSISTENCY IS NOT GUARANTEED IF CONNECTIVITY IS INTERRUPTED.**
 

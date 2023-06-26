@@ -1,5 +1,4 @@
 import { decode as msgunpack, encode as msgpack } from 'msgpackr'
-import { utils as EthersUtils } from 'ethers'
 import { sha3_512 as SHA3 } from '@noble/hashes/sha3'
 
 import tweetnacl from 'tweetnacl'
@@ -44,6 +43,11 @@ export class EncryptedDatabase {
   IDToResolver = new Map()
   onInitialized = () => null
 
+  static create (...args) {
+    const e = new EncryptedDatabase()
+    return e.initialize(...args)
+  }
+
   // Initialization
   async initialize (provider, { appID = null, url }) {
     this.wsURL = url
@@ -57,13 +61,13 @@ export class EncryptedDatabase {
     } catch (e) {
       console.error('EDS, failed to request accounts:', e)
     }
-    this.signer = this.provider.getSigner()
+    this.signer = await this.provider.getSigner()
     this.address = await this.signer.getAddress()
-    this.addressBytes = EthersUtils.arrayify(this.address)
+    this.addressBytes = Buffer.from(this.address.slice(2), 'hex')
 
     this._walletPubKey = await this.provider.send('eth_getEncryptionPublicKey', [this.address])
     const pkBytes = Buffer.from(this._walletPubKey, 'base64')
-    this._walletPKHash = easyHash(appID == null ? pkBytes : Buffer.concat([pkBytes, Buffer.from('_' + appID)]) )
+    this._walletPKHash = easyHash(appID == null ? pkBytes : Buffer.concat([pkBytes, Buffer.from('_' + appID)]))
 
     this.initializeSocket()
     return new Promise(resolve => {
@@ -96,7 +100,9 @@ export class EncryptedDatabase {
   }
 
   onClosedOrError = async () => {
-    this.writeLockRelease = await this.writeLock.acquire()
+    if (!this.writeLock.isLocked()) {
+      this.writeLockRelease = await this.writeLock.acquire()
+    }
     this.state = STATE_AWAITING_CHALLENGE
     this.onInitialized = () => null
     await sleep(1000)
@@ -117,7 +123,7 @@ export class EncryptedDatabase {
 
     switch (this.state) {
       case STATE_AWAITING_CHALLENGE: {
-        const sig = EthersUtils.arrayify(await this.signer.signMessage(MESSAGE_PREFIX + data.ChallengeBuffer))
+        const sig = Buffer.from((await this.signer.signMessage(MESSAGE_PREFIX + data.ChallengeBuffer)).slice(2), 'hex')
         this.sendMessage({
           Address: this.addressBytes,
           Signature: sig,
@@ -160,15 +166,9 @@ export class EncryptedDatabase {
       }
       case STATE_AWAITING_WELCOME: {
         console.log('EDS | Received welcome, logged into the EDS system:', data)
-        this.onInitialized()
         this.state = STATE_FULLY_AUTHENTICATED
-        try {
-          this.writeLockRelease()
-          this.writeLockRelease = null
-        } catch (e) {
-          console.log('Errored while releasing write lock!')
-          console.error(e)
-        }
+        this.onInitialized()
+        this.writeLockRelease()
         break
       }
       case STATE_FULLY_AUTHENTICATED: {
@@ -237,7 +237,6 @@ export class EncryptedDatabase {
       Key: hash,
       Value: this.encryptData(value)
     })
-    console.log('Setting (KV) Key:', key, ';Value:', value, ';ID:', ID)
     return this.waitForReply(ID)
   }
 
@@ -248,7 +247,6 @@ export class EncryptedDatabase {
       ID,
       KeyHash: hash
     })
-    console.log('Getting row by ID:', hash, ';ID:', ID)
     return this.decryptDataResponse(ID)
   }
 
@@ -259,9 +257,7 @@ export class EncryptedDatabase {
       ID,
       KeyHash: hash
     })
-    const v = this.decryptDataResponse(ID)
-    console.log('Deleted:', key, ';ID:', hash, ';Response:', v)
-    return v
+    return this.decryptDataResponse(ID)
   }
 
   getRowsUpdatedSince = async (time) => {
@@ -275,9 +271,7 @@ export class EncryptedDatabase {
       const nonce = row.Data.subarray(0, tweetnacl.secretbox.nonceLength)
       const ciphertext = row.Data.subarray(tweetnacl.secretbox.nonceLength)
       const data = tweetnacl.secretbox.open(ciphertext, nonce, this.privateKey)
-      const v = msgunpack(data)
-      console.log('Synced rows and found:', v)
-      return v
+      return msgunpack(data)
     })
   }
 
@@ -286,7 +280,6 @@ export class EncryptedDatabase {
     const data = this.encryptData(row)
     const ID = randUint32()
 
-    console.log('Upserting:', primaryKey, KeyHash.toString('hex'), ';Data:', row, ';ID:', ID)
     await this.sendTypedMessage(REQ_ROW_UPSERT, {
       ID,
       KeyHash,
