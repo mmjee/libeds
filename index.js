@@ -271,8 +271,12 @@ export class EncryptedDatabase {
       const nonce = row.Data.subarray(0, tweetnacl.secretbox.nonceLength)
       const ciphertext = row.Data.subarray(tweetnacl.secretbox.nonceLength)
       const data = tweetnacl.secretbox.open(ciphertext, nonce, this.privateKey)
+      if (data == null) {
+        console.log('EDS | Failed to decrypt, skipping. Please report this incidence to the developer immediately:', ciphertext, nonce, data)
+        return null
+      }
       return msgunpack(data)
-    })
+    }).filter(row => row != null)
   }
 
   upsertRow = async (primaryKey, row) => {
