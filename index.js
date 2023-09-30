@@ -42,6 +42,7 @@ export class EncryptedDatabase {
   state = STATE_AWAITING_CHALLENGE
   IDToResolver = new Map()
   onInitialized = () => null
+  wsSerial = 0
 
   static create (...args) {
     const e = new EncryptedDatabase()
@@ -54,7 +55,6 @@ export class EncryptedDatabase {
     this.provider = provider
     this.lock = new Mutex()
     this.writeLock = new Mutex()
-    this.writeLockRelease = await this.writeLock.acquire()
 
     try {
       await this.provider.send('eth_requestAccounts', [])
@@ -77,11 +77,38 @@ export class EncryptedDatabase {
 
   // Private functions ⬇️
   initializeSocket () {
+    this.wsSerial++
+    const closeCb = this.getCloseCb(this.wsSerial)
+
+    this.state = STATE_AWAITING_CHALLENGE
     this.ws = new WebSocket(this.wsURL)
     this.ws.binaryType = 'arraybuffer'
-    this.ws.addEventListener('error', this.onClosedOrError)
-    this.ws.addEventListener('close', this.onClosedOrError)
     this.ws.addEventListener('message', this.onMessage)
+    this.ws.addEventListener('close', closeCb)
+    this.ws.addEventListener('error', closeCb)
+  }
+
+  getCloseCb (wsSerial) {
+    return async (ev) => {
+      if (this.wsSerial !== wsSerial) {
+        console.log('EDS | Skipping reconnect', this.wsSerial, wsSerial)
+        return
+      }
+      if (!('code' in ev && ev.code === 4242)) {
+        if (
+          this.ws.readyState === WebSocket.CONNECTING ||
+          this.ws.readyState === WebSocket.OPEN
+        ) {
+          this.ws.close(4242)
+        }
+        this.wsSerial++
+        if (!this.writeLock.isLocked()) {
+          await this.writeLock.acquire()
+        }
+        await sleep(5000)
+        this.initializeSocket()
+      }
+    }
   }
 
   sendMessage (msg) {
@@ -89,24 +116,18 @@ export class EncryptedDatabase {
   }
 
   async sendTypedMessage (type = null, msg) {
-    await this.writeLock.waitForUnlock()
-    this.ws.send(Buffer.concat([new Uint8Array([type]), msgpack(msg)]))
+    await this.writeLock.acquire()
+    try {
+      this.ws.send(Buffer.concat([new Uint8Array([type]), msgpack(msg)]))
+    } finally {
+      this.writeLock.release()
+    }
   }
 
   waitForReply (id) {
     return new Promise(resolve => {
       this.IDToResolver.set(id, resolve)
     })
-  }
-
-  onClosedOrError = async () => {
-    if (!this.writeLock.isLocked()) {
-      this.writeLockRelease = await this.writeLock.acquire()
-    }
-    this.state = STATE_AWAITING_CHALLENGE
-    this.onInitialized = () => null
-    await sleep(1000)
-    this.initializeSocket()
   }
 
   onMessage = async (msg) => {
@@ -118,7 +139,7 @@ export class EncryptedDatabase {
     }
   }
 
-  handleMessage = async (msg) => {
+  async handleMessage (msg) {
     const data = msgunpack(Buffer.from(msg.data))
 
     switch (this.state) {
@@ -167,8 +188,11 @@ export class EncryptedDatabase {
       case STATE_AWAITING_WELCOME: {
         console.log('EDS | Received welcome, logged into the EDS system:', data)
         this.state = STATE_FULLY_AUTHENTICATED
-        this.onInitialized()
-        this.writeLockRelease()
+        if (this.onInitialized !== null) {
+          this.onInitialized()
+          this.onInitialized = null
+        }
+        this.writeLock.release()
         break
       }
       case STATE_FULLY_AUTHENTICATED: {
@@ -179,12 +203,12 @@ export class EncryptedDatabase {
             resolver(data)
           }
         } else {
-          console.warn('Weird or unimplemented message:', data)
+          console.warn('EDS | Weird or unimplemented message:', data)
         }
         break
       }
       default: {
-        console.warn('Ignoring:', data)
+        console.warn('EDS | Ignoring:', data)
       }
     }
   }
